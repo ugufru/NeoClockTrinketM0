@@ -3,6 +3,7 @@
 // For 5v Trinket M0, PCF8523 RTC, and 12 Neopixel Ring
 
 #include <Adafruit_DotStar.h>
+#include <Adafruit_FreeTouch.h>
 #include <Adafruit_NeoPixel.h>
 #include <SPI.h>
 #include <Wire.h>
@@ -24,6 +25,8 @@ int hh = 0;
 int mm = 0;
 int ss = 0;
 
+Adafruit_FreeTouch touch1 = Adafruit_FreeTouch(BUTTON_1_PIN, OVERSAMPLE_4, RESISTOR_0, FREQ_MODE_NONE);
+Adafruit_FreeTouch touch2 = Adafruit_FreeTouch(BUTTON_2_PIN, OVERSAMPLE_4, RESISTOR_0, FREQ_MODE_NONE);
 Adafruit_DotStar dotstar = Adafruit_DotStar(1, DOTSTAR_DATA_PIN, DOTSTAR_CLOCK_PIN, DOTSTAR_BGR);
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NEOPIXEL_COUNT, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
@@ -40,18 +43,35 @@ void setup()
   initButtons();
   initNeoPixels();
   initRTC();
+
+  for (int i = 0; i < 24; i++)
+  {
+    doTheRainbowDanceLeft();
+    delay(75);
+  }
+
+  for (int i = 0; i < 24; i++)
+  {
+    doTheRainbowDanceRight();
+    delay(25);
+  }
 }
 
 void initButtons()
 {
-  pinMode(BUTTON_1_PIN, INPUT_PULLUP);
-  pinMode(BUTTON_2_PIN, INPUT_PULLUP);
+  if (touch1.begin() == false) error("Could not init button 1.");
+  if (touch2.begin() == false) error("Could not init button 2.");
+
+  Serial.println("Initialized touch sensors.");
 }
 
 void initSerial()
 {
   Serial.begin(9600);
-  delay(1000);
+  unsigned long timesup = millis() + 2000;
+  
+  while (!Serial && millis() < timesup);
+  
   Serial.println("Serial open...");
 }
 
@@ -61,9 +81,13 @@ void initNeoPixels()
   strip.setBrightness(NEOPIXEL_BRIGHTNESS);
   strip.show();
 
+  Serial.println("Initialized neopixels.");
+
   dotstar.begin();
   dotstar.show();
   dotstar.setBrightness(NEOPIXEL_BRIGHTNESS);
+
+  Serial.println("Initialized dotstar.");
 }
 
 void initRTC()
@@ -103,6 +127,7 @@ void initRTC()
   // to be restarted by clearing the STOP bit. Let's do this to ensure
   // the RTC is running.
   rtc.start();
+  Serial.println("Initialized RTC.");
 }
 
 void error(char* message)
@@ -120,8 +145,8 @@ void error(char* message)
   }
 }
 
-boolean button1 = true;
-boolean button2 = true;
+int button1 = 0;
+int button2 = 0;
 
 void loop()
 {
@@ -129,13 +154,13 @@ void loop()
 
   if (loopCount == 0)
   {
-    button1 = digitalRead(BUTTON_1_PIN);
-    button2 = digitalRead(BUTTON_2_PIN);
+    button1 = touch1.measure();
+    button2 = touch2.measure();
 
-    //    Serial.print("button 1 = ");
-    //    Serial.print(button1);
-    //    Serial.print(", button 2 = ");
-    //    Serial.println(button2);
+    Serial.print("button 1 = ");
+    Serial.print(button1);
+    Serial.print(", button 2 = ");
+    Serial.println(button2);
 
     checkHourButton();
     checkRainbowRight();
@@ -145,23 +170,23 @@ void loop()
 
 void checkRainbowLeft()
 {
-  while (button1 == false)
+  while (button1 > 1000)
   {
     doTheRainbowDanceLeft();
     delay(50);
-    button1 = digitalRead(BUTTON_1_PIN);
+    button1 = touch1.measure();
   }
 }
 
 void checkHourButton()
 {
-  if (button1 == false)
+  if (button1 > 1000)
   {
     DateTime now = rtc.now();
 
     int h = now.twelveHour() % 12;
 
-    while (button1 == false)
+    while (button1 > 1000)
     {
       h = (h + 1) % 12;
 
@@ -179,7 +204,7 @@ void checkHourButton()
       strip.show();
       delay(500);
 
-      button1 = digitalRead(BUTTON_1_PIN);
+      button1 = touch1.measure();
     }
 
     // Set the resulting hour.
@@ -198,11 +223,11 @@ void checkHourButton()
 
 void checkRainbowRight()
 {
-  while (button2 == false)
+  while (button2 > 1000)
   {
     doTheRainbowDanceRight();
     delay(50);
-    button2 = digitalRead(BUTTON_2_PIN);
+    button2 = touch2.measure();
   }
 }
 

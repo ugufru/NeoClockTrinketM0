@@ -256,6 +256,12 @@ void updateTime()
   //    Serial.print(", ss = ");
   //    Serial.println(ss);
 
+  if (s == 0)
+  {
+    doTheRainbowDanceRight();
+    return;
+  }
+
   // The cardinal is white and flashes.
 
   for (int i = 0; i < 12; i++)

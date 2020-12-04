@@ -1,5 +1,6 @@
 
 // Flashing variation; only the cardinal.
+// For 5v Trinket M0, PCF8523 RTC, and 12 Neopixel Ring
 
 #include <Adafruit_DotStar.h>
 #include <Adafruit_NeoPixel.h>
@@ -15,8 +16,7 @@
 #define DOTSTAR_CLOCK_PIN 8
 
 #define NEOPIXEL_COUNT 12
-#define NEOPIXEL_BRIGHTNESS 32
-
+#define NEOPIXEL_BRIGHTNESS 64
 
 RTC_PCF8523 rtc;
 
@@ -51,6 +51,8 @@ void initButtons()
 void initSerial()
 {
   Serial.begin(9600);
+  delay(1000);
+  Serial.println("Serial open...");
 }
 
 void initNeoPixels()
@@ -66,7 +68,7 @@ void initNeoPixels()
 
 void initRTC()
 {
-  if (rtc.begin() == false) error(80);
+  if (rtc.begin() == false) error("Could not initialize RTC.");
 
   Serial.println("Something, something...");
   Serial.print("rtc.initialized() = ");
@@ -92,7 +94,7 @@ void initRTC()
 
   // When time needs to be re-set on a previously configured device, the
   // following line sets the RTC to the date & time this sketch was compiled
-  //  rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  //rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
   // This line sets the RTC with an explicit date & time, for example to set
   // January 21, 2014 at 3am you would call:
   // rtc.adjust(DateTime(2014, 1, 21, 3, 0, 0));
@@ -103,36 +105,104 @@ void initRTC()
   rtc.start();
 }
 
-void error(int pos)
+void error(char* message)
 {
-  flashColor(Wheel(pos));
-  abort();
+  Serial.println(message);
+
+  while (true)
+  {
+    dotstar.setPixelColor(0, 255, 0, 0);
+    strip.show();
+    delay(50);
+    dotstar.setPixelColor(0, 0);
+    strip.show();
+    delay(50);
+  }
 }
 
+boolean button1 = true;
+boolean button2 = true;
 
 void loop()
 {
   loopCount = (loopCount + 1) % 20000;
 
-  boolean button1 = digitalRead(BUTTON_1_PIN);
-  boolean button2 = digitalRead(BUTTON_2_PIN);
-
   if (loopCount == 0)
   {
+    button1 = digitalRead(BUTTON_1_PIN);
+    button2 = digitalRead(BUTTON_2_PIN);
+
     //    Serial.print("button 1 = ");
-    //    Serial.println(button1);
+    //    Serial.print(button1);
+    //    Serial.print(", button 2 = ");
+    //    Serial.println(button2);
+
+    checkHourButton();
+    checkRainbowRight();
+    updateTime();
+  }
+}
+
+void checkRainbowLeft()
+{
+  while (button1 == false)
+  {
+    doTheRainbowDanceLeft();
+    delay(50);
+    button1 = digitalRead(BUTTON_1_PIN);
+  }
+}
+
+void checkHourButton()
+{
+  if (button1 == false)
+  {
+    DateTime now = rtc.now();
+
+    int h = now.twelveHour() % 12;
+
     while (button1 == false)
     {
-      doTheRainbowDance();
-      delay(50);
+      h = (h + 1) % 12;
+
+      for (int i = 0; i < 12; i++)
+      {
+        if (h == i)
+        {
+          strip.setPixelColor(i, 255, 0, 0);
+        }
+        else
+        {
+          strip.setPixelColor(i, 0, 0, 0);
+        }
+      }
+      strip.show();
+      delay(500);
+
       button1 = digitalRead(BUTTON_1_PIN);
     }
 
-    //    Serial.print("button 2 = ");
-    //    Serial.println(button2);
-    if (button2 == false) flashColor(Wheel(80));
+    // Set the resulting hour.
+    DateTime newTime = DateTime(now.year(), now.month(), now.day(), h, now.minute(), now.second());
+    Serial.print("Adjusting RTC time to ");
+    Serial.print("h = ");
+    Serial.print(newTime.hour());
+    Serial.print(", m = ");
+    Serial.print(newTime.minute());
+    Serial.print(", s = ");
+    Serial.println(newTime.second());
 
-    updateTime();
+    rtc.adjust(newTime);
+  }
+}
+
+void checkRainbowRight()
+{
+  while (button2 == false)
+  {
+    doTheRainbowDanceRight();
+    delay(50);
+    button2 = digitalRead(BUTTON_2_PIN);
   }
 }
 
@@ -236,9 +306,9 @@ void updateTime()
   strip.show();
 }
 
-void doTheRainbowDance()
+void doTheRainbowDanceLeft()
 {
-  pushPixel(Wheel(hue));
+  pushPixelLeft(Wheel(hue));
 
   hue = (hue + offset) % 0xFF;
 
@@ -246,8 +316,17 @@ void doTheRainbowDance()
   offset2 = (offset2 + 1) % 0x20;
 }
 
+void doTheRainbowDanceRight()
+{
+  pushPixelRight(Wheel(hue));
 
-void pushPixel(uint32_t color)
+  hue = (hue + offset) % 0xFF;
+
+  offset = (offset + offset2) % 0x40;
+  offset2 = (offset2 + 1) % 0x20;
+}
+
+void pushPixelLeft(uint32_t color)
 {
   uint16_t count = strip.numPixels();
 
@@ -261,37 +340,35 @@ void pushPixel(uint32_t color)
   strip.show();
 }
 
-// Input a value 0 to 255 to get a color value.
-// The colours are a transition r - g - b - back to r.
-uint32_t Wheel(byte WheelPos) {
-  if (WheelPos < 85) {
-    return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
+void pushPixelRight(uint32_t color)
+{
+  uint16_t count = strip.numPixels();
+
+  for (uint16_t i = 0; i < count - 1; i++)
+  {
+    int v = count - i - 1;
+    uint32_t c = strip.getPixelColor(v - 1);
+    strip.setPixelColor(v, c);
   }
-  else if (WheelPos < 170) {
-    WheelPos -= 85;
-    return strip.Color(255 - WheelPos * 3, 0, WheelPos * 3);
-  }
-  else {
-    WheelPos -= 170;
-    return strip.Color(0, WheelPos * 3, 255 - WheelPos * 3);
-  }
+
+  strip.setPixelColor(0, color);
+  strip.show();
 }
 
-void flashColor(uint32_t color)
+uint32_t Wheel(byte WheelPos)
 {
-  for (int x = 0; x < 5; x++)
+  if (WheelPos < 85)
   {
-    for (int i = 0; i < 12; i++)
-    {
-      strip.setPixelColor(i, color);
-    }
-    strip.show();
-    delay(50);
-    for (int i = 0; i < 12; i++)
-    {
-      strip.setPixelColor(i, 0);
-    }
-    strip.show();
-    delay(50);
+    return strip.gamma32(strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0));
+  }
+  else if (WheelPos < 170)
+  {
+    WheelPos -= 85;
+    return strip.gamma32(strip.Color(255 - WheelPos * 3, 0, WheelPos * 3));
+  }
+  else
+  {
+    WheelPos -= 170;
+    return strip.gamma32(strip.Color(0, WheelPos * 3, 255 - WheelPos * 3));
   }
 }
